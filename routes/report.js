@@ -7,6 +7,8 @@ const {
   updateStatus,
   deleteReport,
   addComment,
+  updateComment,
+  deleteComment,
   getPurokAnalytics,
   getDashboardSummary,
   getAnalyticsPeriodSummary,
@@ -26,6 +28,8 @@ router.put("/:id", protect, authorize("admin"), updateStatus);
 router.delete("/:id", protect, authorize("admin"), deleteReport);
 
 router.post("/:id/comment", protect, addComment);
+router.put("/:id/comment/:commentId", protect, authorize("admin"), updateComment);
+router.delete("/:id/comment/:commentId", protect, authorize("admin"), deleteComment);
 
 router.get("/analytics/purok", protect, authorize("admin"), getPurokAnalytics);
 

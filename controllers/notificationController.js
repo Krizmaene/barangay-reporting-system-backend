@@ -22,10 +22,34 @@ exports.markNotificationAsRead = async (req, res) => {
       return res.status(404).json({ msg: "Notification not found" });
     }
 
+    if (String(notification.user) !== req.user.id) {
+      return res.status(403).json({ msg: "Not authorized" });
+    }
+
     notification.read = true;
     await notification.save();
 
     res.json(notification);
+  } catch (err) {
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+exports.deleteNotification = async (req, res) => {
+  try {
+    const notification = await Notification.findById(req.params.id);
+
+    if (!notification) {
+      return res.status(404).json({ msg: "Notification not found" });
+    }
+
+    if (String(notification.user) !== req.user.id) {
+      return res.status(403).json({ msg: "Not authorized" });
+    }
+
+    await notification.deleteOne();
+
+    res.json({ msg: "Notification deleted successfully", notificationId: req.params.id });
   } catch (err) {
     res.status(500).json({ msg: "Server error" });
   }

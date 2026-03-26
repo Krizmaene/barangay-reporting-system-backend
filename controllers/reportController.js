@@ -106,6 +106,7 @@ exports.createReport = async (req, res) => {
         await Notification.insertMany(
           admins.map((admin) => ({
             user: admin._id,
+            report: report._id,
             message: `A new ${category} report was submitted in ${purok || "an unspecified purok"}.`
           }))
         );
@@ -155,6 +156,7 @@ exports.getAllReports = async (req, res) => {
 
     const reports = await Report.find(filter)
       .populate("resident", "name email")
+      .populate("comments.user", "name")
       .sort({ createdAt: -1 });
 
     res.json(reports);
@@ -182,6 +184,7 @@ exports.updateStatus = async (req, res) => {
     // Create notification for resident
     await Notification.create({
       user: report.resident,
+      report: report._id,
       message: `Your report status has been updated to ${status}`
     });
 
@@ -195,11 +198,23 @@ exports.updateStatus = async (req, res) => {
 // ADMIN: Delete Report
 exports.deleteReport = async (req, res) => {
   try {
-    const report = await Report.findByIdAndDelete(req.params.id);
+    const report = await Report.findById(req.params.id);
 
     if (!report) {
       return res.status(404).json({ msg: "Report not found" });
     }
+
+    await Promise.all([
+      Report.findByIdAndDelete(req.params.id),
+      Notification.deleteMany({
+        $or: [
+          { report: report._id },
+          {
+            message: `A new ${report.category} report was submitted in ${report.purok || "an unspecified purok"}.`
+          }
+        ]
+      })
+    ]);
 
     res.json({ msg: "Report deleted successfully", reportId: req.params.id });
   } catch (err) {
@@ -229,6 +244,7 @@ exports.addComment = async (req, res) => {
     // Notify resident
     await Notification.create({
       user: report.resident,
+      report: report._id,
       message: "Admin added a comment to your report"
     });
 
@@ -288,6 +304,67 @@ exports.getDashboardSummary = async (req, res) => {
       resolved
     });
 
+  } catch (err) {
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+// ADMIN: Edit Comment
+exports.updateComment = async (req, res) => {
+  try {
+    const nextText = String(req.body.text || "").trim();
+
+    if (!nextText) {
+      return res.status(400).json({ msg: "Comment text is required" });
+    }
+
+    const report = await Report.findById(req.params.id);
+
+    if (!report) {
+      return res.status(404).json({ msg: "Report not found" });
+    }
+
+    const comment = report.comments.id(req.params.commentId);
+
+    if (!comment) {
+      return res.status(404).json({ msg: "Comment not found" });
+    }
+
+    comment.text = nextText;
+    comment.date = new Date();
+    report.markModified("comments");
+
+    await report.save();
+    await report.populate("comments.user", "name");
+
+    res.json(report.comments);
+  } catch (err) {
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+// ADMIN: Delete Comment
+exports.deleteComment = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id);
+
+    if (!report) {
+      return res.status(404).json({ msg: "Report not found" });
+    }
+
+    const comment = report.comments.id(req.params.commentId);
+
+    if (!comment) {
+      return res.status(404).json({ msg: "Comment not found" });
+    }
+
+    report.comments.pull({ _id: req.params.commentId });
+    report.markModified("comments");
+
+    await report.save();
+    await report.populate("comments.user", "name");
+
+    res.json(report.comments);
   } catch (err) {
     res.status(500).json({ msg: "Server error" });
   }
